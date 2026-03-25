@@ -13,8 +13,7 @@ from shazamio import Shazam
 import pystray
 from PIL import Image
 
-INITIAL_RECORD_SECONDS = 10   
-NORMAL_INTERVAL = 1           
+NORMAL_INTERVAL = 2           
 
 app = Flask(__name__)
 
@@ -116,6 +115,8 @@ class MusicManager:
         self.escutando = False   
         self.busca_concluida = False 
         self.status_busca = "Alt + M to hide" 
+        self.letra_pausada = False
+        self.momento_pausa = 0.0
 
     async def reconhecer_snippet(self, audio_bytes):
         try:
@@ -128,21 +129,27 @@ class MusicManager:
             log(f"Shazam error: {e}", "ERROR")
         return None, None, 0.0
 
-    def buscar_letra_lrclib(self, artista, musica):
-        try:
-            headers = {"User-Agent": "FrontLineLyricsApp/1.0"}
-            
-            def extrair_linhas(synced_lyrics):
-                linhas = []
-                padrao = re.compile(r'\[(\d{2,}):(\d{2}(?:\.\d{1,3})?)\](.*)')
-                for linha in synced_lyrics.split('\n'):
-                    match = padrao.match(linha)
-                    if match:
-                        tempo = (int(match.group(1)) * 60) + float(match.group(2))
-                        texto = match.group(3).strip()
-                        if texto: linhas.append({"tempo": tempo, "letra": texto})
-                return linhas
+    def limpar_nome_musica(self, texto):
+        if not texto: return ""
+        texto_limpo = re.sub(r'\(.*?(feat|remaster|radio edit|mix|version).*?\)', '', texto, flags=re.IGNORECASE)
+        texto_limpo = re.sub(r'-.*?(remaster|radio edit|mix|version).*', '', texto_limpo, flags=re.IGNORECASE)
+        return texto_limpo.strip()
 
+    def buscar_letra_lrclib(self, artista, musica):
+        headers = {"User-Agent": "FrontLineLyricsApp/1.0"}
+        
+        def extrair_linhas(synced_lyrics):
+            linhas = []
+            padrao = re.compile(r'\[(\d{2,}):(\d{2}(?:\.\d{1,3})?)\](.*)')
+            for linha in synced_lyrics.split('\n'):
+                match = padrao.match(linha)
+                if match:
+                    tempo = (int(match.group(1)) * 60) + float(match.group(2))
+                    texto = match.group(3).strip()
+                    if texto: linhas.append({"tempo": tempo, "letra": texto})
+            return linhas
+
+        try:
             url_get = "https://lrclib.net/api/get"
             r = requests.get(url_get, params={"artist_name": artista, "track_name": musica}, headers=headers, timeout=5)
             
@@ -152,14 +159,50 @@ class MusicManager:
                     linhas = extrair_linhas(dados["syncedLyrics"])
                     if linhas:
                         linhas.append({"tempo": linhas[-1]["tempo"] + 5.0, "letra": "End"})
-                    return linhas
-            
+                        return linhas
             elif r.status_code == 429:
                 log("Warning: LRCLib request limit reached.", "WARNING")
                 return [{"tempo": 0.0, "letra": "Lyrics server overloaded. Please wait."}]
-                
         except Exception as e:
-            log(f"LRCLib search error: {e}", "ERROR")
+            log(f"LRCLib exact search error: {e}", "ERROR")
+
+        artista_limpo = self.limpar_nome_musica(artista)
+        musica_limpa = self.limpar_nome_musica(musica)
+        
+        if artista_limpo != artista or musica_limpa != musica:
+            log(f"Fallback 1: Tentando nomes limpos ({artista_limpo} - {musica_limpa})", "LOGIC")
+            try:
+                r = requests.get(url_get, params={"artist_name": artista_limpo, "track_name": musica_limpa}, headers=headers, timeout=5)
+                if r.status_code == 200:
+                    dados = r.json()
+                    if dados.get("syncedLyrics"):
+                        linhas = extrair_linhas(dados["syncedLyrics"])
+                        if linhas:
+                            linhas.append({"tempo": linhas[-1]["tempo"] + 5.0, "letra": "End"})
+                            return linhas
+            except Exception as e:
+                pass 
+
+        log(f"Fallback 2: Usando busca ampla para: {musica_limpa} {artista_limpo}", "LOGIC")
+        try:
+            url_search = "https://lrclib.net/api/search"
+            query = f"{musica_limpa} {artista_limpo}" 
+            r = requests.get(url_search, params={"q": query}, headers=headers, timeout=7)
+            
+            if r.status_code == 200:
+                resultados = r.json()
+                if isinstance(resultados, list):
+                    for item in resultados:
+                        if item.get("syncedLyrics"):
+                            log(f"Letra encontrada via Search Fallback! (ID: {item.get('id')})", "LOGIC")
+                            linhas = extrair_linhas(item["syncedLyrics"])
+                            if linhas:
+                                linhas.append({"tempo": linhas[-1]["tempo"] + 5.0, "letra": "End"})
+                                return linhas
+        except Exception as e:
+            log(f"LRCLib search fallback error: {e}", "ERROR")
+
+        log("Todas as tentativas de buscar a letra falharam.", "WARNING")
         return None
 
 manager = MusicManager()
@@ -171,7 +214,8 @@ def get_status():
     linha_futura = ""
     
     if manager.letra_sincronizada:
-        tempo_decorrido = (time.time() - manager.tempo_referencia_sistema) + manager.delay_manual
+        tempo_base = manager.momento_pausa if manager.letra_pausada else time.time()
+        tempo_decorrido = (tempo_base - manager.tempo_referencia_sistema) + manager.delay_manual
         
         for i, item in enumerate(manager.letra_sincronizada):
             if tempo_decorrido >= item['tempo']:
@@ -191,20 +235,36 @@ def get_status():
         "linha_futura": linha_futura,
         "status_msg": manager.status_busca,
         "busca_concluida": manager.busca_concluida,
-        "letra_encontrada": len(manager.letra_sincronizada) > 0
+        "letra_encontrada": len(manager.letra_sincronizada) > 0,
+        "pausado": manager.letra_pausada
     })
 
 @app.route('/iniciar', methods=['GET'])
 def iniciar_escuta():
     manager.reset_state()
     manager.escutando = True
-    manager.status_busca = "Listening..."
+    manager.status_busca = "Alt + M to hide"
     return jsonify({"status": "processando"})
 
 @app.route('/parar', methods=['GET'])
 def parar_escuta():
     manager.reset_state()
     return jsonify({"status": "parado"})
+
+@app.route('/toggle_pause', methods=['GET'])
+def toggle_pause():
+    if not manager.letra_sincronizada:
+        return jsonify({"status": "erro", "mensagem": "Nenhuma letra ativa"})
+        
+    if manager.letra_pausada:
+        tempo_parado = time.time() - manager.momento_pausa
+        manager.tempo_referencia_sistema += tempo_parado
+        manager.letra_pausada = False
+    else:
+        manager.letra_pausada = True
+        manager.momento_pausa = time.time()
+        
+    return jsonify({"status": "sucesso", "pausado": manager.letra_pausada})
 
 @app.route('/letra_completa', methods=['GET'])
 def get_letra_completa():
@@ -221,6 +281,8 @@ def sincronizar_manual():
     if tempo is not None:
         manager.tempo_referencia_sistema = time.time() - tempo
         manager.delay_manual = 0.0
+        manager.letra_pausada = False 
+        manager.momento_pausa = 0.0
         return jsonify({"status": "sucesso"})
     return jsonify({"status": "erro"}), 400
 
@@ -243,6 +305,7 @@ def buscar_manual():
         manager.tempo_referencia_sistema = time.time()
         manager.delay_manual = 0.0
         manager.status_busca = "Alt + M to hide"
+        manager.letra_pausada = False
         return jsonify({"status": "sucesso", "letra_completa": letra})
     else:
         manager.status_busca = "Alt + M to hide"
@@ -250,8 +313,13 @@ def buscar_manual():
 
 async def async_worker_verificacao(manager):
     loop = asyncio.get_event_loop()
+    tempo_gravacao_atual = 4 
+    tentativas_sem_sucesso = 0
+
     while manager.servidor_rodando:
         if not manager.escutando or manager.busca_concluida:
+            tempo_gravacao_atual = 4 
+            tentativas_sem_sucesso = 0
             await asyncio.sleep(1)
             continue
 
@@ -259,7 +327,7 @@ async def async_worker_verificacao(manager):
         t_inicio_gravacao = time.time()
         
         try:
-            audio_bytes = await loop.run_in_executor(None, manager.gravar_audio_memoria, INITIAL_RECORD_SECONDS)
+            audio_bytes = await loop.run_in_executor(None, manager.gravar_audio_memoria, tempo_gravacao_atual)
         except Exception as e:
             log(f"Error capturing audio. Attempting to reconfigure device...", "WARNING")
             manager.status_busca = "Audio disconnected. Reconnecting..."
@@ -277,6 +345,9 @@ async def async_worker_verificacao(manager):
             manager.artista_atual = novo_artista
             manager.status_busca = "Fetching lyrics..."
             
+            tempo_gravacao_atual = 4 
+            tentativas_sem_sucesso = 0
+            
             letra = await loop.run_in_executor(None, manager.buscar_letra_lrclib, novo_artista, nova_musica)
             manager.busca_concluida = True
             manager.status_busca = "Alt + M to hide"
@@ -286,6 +357,22 @@ async def async_worker_verificacao(manager):
                 manager.tempo_referencia_sistema = t_inicio_gravacao - offset_shazam
             else:
                 pass
+        else:
+            tentativas_sem_sucesso += 1
+            if tentativas_sem_sucesso <= 2:
+                tempo_gravacao_atual = 4
+                msg_amigavel = "Listening closely..."
+            else:
+                tempo_gravacao_atual = min(4 + (tentativas_sem_sucesso - 2), 10)
+                if tempo_gravacao_atual < 7:
+                    msg_amigavel = "Analyzing audio details..."
+                elif tempo_gravacao_atual < 10:
+                    msg_amigavel = "Still trying to catch the beat..."
+                else:
+                    msg_amigavel = "Audio is tricky! Try Manual Search."
+                    
+            if manager.escutando:
+                manager.status_busca = msg_amigavel
         
         await asyncio.sleep(NORMAL_INTERVAL)
 
@@ -320,9 +407,7 @@ if __name__ == "__main__":
     log_flask.disabled = True
     
     threading.Thread(target=lambda: app.run(port=5000, debug=False, use_reloader=False), daemon=True).start()
-    
     threading.Thread(target=start_background_loop, args=(manager,), daemon=True).start()
     
     log("Server running in the background. Check the tray icon.")
-
     iniciar_bandeja()

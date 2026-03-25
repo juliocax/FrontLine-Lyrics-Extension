@@ -57,7 +57,7 @@ if (document.getElementById('frontline-lyrics-root')) {
             .lsp-linha-clicavel { padding: 6px; cursor: pointer; color: #888; border-bottom: 1px solid #222; }
             .lsp-linha-clicavel:hover { background: #222; color: #fff; }
             
-            #lsp-status { font-size: 10px; color: #888; text-align: center; margin-top: 10px; }
+            #lsp-status { font-size: 16px; color: #cacaca; text-align: center; margin-top: 10px; }
             .lsp-aviso-privacidade { font-size: 9px; color: #cc8800; text-align: center; margin-top: 6px; line-height: 1.2; }
 
             .lsp-btn-fechar {
@@ -113,8 +113,9 @@ if (document.getElementById('frontline-lyrics-root')) {
 
         <div class="lsp-controls-row">
             <button id="lsp-btnIniciar">Listen</button>
+            <button id="lsp-btnPausar" style="display: none;">Pause</button>
             <button id="lsp-btnParar">Stop</button>
-            <button id="lsp-btnManual">Search Lyrics</button>
+            <button id="lsp-btnManual">Search</button>
         </div>
 
         <button id="lsp-btnSelecionarLinha">Manual Sync</button>
@@ -128,7 +129,6 @@ if (document.getElementById('frontline-lyrics-root')) {
         
         <div id="lsp-status">Alt + M to hide</div>
         
-
         <div id="lsp-privacy-modal">
             <h3>About Audio Capture</h3>
             <p>
@@ -158,12 +158,16 @@ if (document.getElementById('frontline-lyrics-root')) {
     const elPainelManual = shadow.getElementById('lsp-painelManual');
     const elListaLetra = shadow.getElementById('lsp-listaLetraCompleta');
     const btnSinc = shadow.getElementById('lsp-btnSelecionarLinha');
+    const btnPausar = shadow.getElementById('lsp-btnPausar');
     const overlay = shadow.getElementById('lsp-overlay');
     
-    // Elementos do Modal
     const privacyModal = shadow.getElementById('lsp-privacy-modal');
     const btnAceitarPrivacidade = shadow.getElementById('lsp-btnAceitarPrivacidade');
     const btnRecusarPrivacidade = shadow.getElementById('lsp-btnRecusarPrivacidade');
+
+    elPainelManual.addEventListener('keydown', (e) => e.stopPropagation());
+    elPainelManual.addEventListener('keyup', (e) => e.stopPropagation());
+    elPainelManual.addEventListener('keypress', (e) => e.stopPropagation());
 
     function aplicarArraste(elemento, alça) {
         let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
@@ -211,9 +215,15 @@ if (document.getElementById('frontline-lyrics-root')) {
         apiFetch('/parar');
         elMusica.innerText = "Stopped";
         elArtista.innerText = "---";
+        elStatus.innerText = "Alt + M to hide";
         elListaLetra.style.display = 'none';
+        btnPausar.style.display = 'none';
         overlay.style.display = "none"; 
         btnSinc.style.display = "none";
+    };
+    
+    btnPausar.onclick = () => {
+        apiFetch('/toggle_pause');
     };
 
     shadow.getElementById('lsp-btnManual').onclick = () => {
@@ -357,10 +367,21 @@ if (document.getElementById('frontline-lyrics-root')) {
                 
                 btnSinc.style.display = data.musica && data.letra_encontrada ? "block" : "none";
                 
+                if (data.letra_encontrada) {
+                    btnPausar.style.display = "block";
+                    btnPausar.innerText = data.pausado ? "Play" : "Pause";
+                    btnPausar.style.backgroundColor = data.pausado ? "#a08d4c" : "#2d2d2d";
+                    btnPausar.style.color = data.pausado ? "#111" : "#e0e0e0";
+                } else {
+                    btnPausar.style.display = "none";
+                }
+                
                 overlay.style.display = "flex"; 
                 atualizarLetraNoOverlay(data);
             } else {
                 elMusica.innerText = "No song...";
+                elStatus.innerText = "Alt + M to hide";
+                btnPausar.style.display = "none";
                 overlay.style.display = "none";
                 btnSinc.style.display = "none";
             }
@@ -372,6 +393,7 @@ if (document.getElementById('frontline-lyrics-root')) {
             elMusica.style.color = "#8b4545";
             elArtista.innerText = "---";
             elStatus.innerText = "Open FrontLine Lyrics.exe";
+            btnPausar.style.display = "none";
             overlay.style.display = "none";
             btnSinc.style.display = "none";
             
