@@ -295,7 +295,7 @@ def start_background_loop(manager):
     loop.run_until_complete(async_worker_verificacao(manager))
 
 def criar_icone():
-    caminho_imagem = resource_path("../assets/logo.ico")
+    caminho_imagem = resource_path("logo.ico")
     try:
         imagem = Image.open(caminho_imagem)
     except:
