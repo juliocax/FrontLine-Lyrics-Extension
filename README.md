@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="promo.png" alt="Texto Alternativo">
+  <img src="assets/promo.png" alt="Texto Alternativo">
 </p>
 
 # FrontLine Lyrics
