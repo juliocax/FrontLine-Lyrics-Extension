@@ -1,8 +1,8 @@
 
-if (window.projetoFestivalInjetado) {
-    console.log("Projeto Festival já está rodando nesta aba.");
+if (window.frontLineLyricsInjetado) {
+    console.log("FrontLine Lyrics já está rodando nesta aba.");
 } else {
-    window.projetoFestivalInjetado = true;
+    window.frontLineLyricsInjetado = true;
 
     const SERVER_URL = "http://localhost:5000";
 
@@ -50,7 +50,7 @@ if (window.projetoFestivalInjetado) {
         </style>
         
         <div class="lsp-header" id="lsp-drag-handle">
-            <h2>Projeto Festival</h2>
+            <h2>FrontLine Lyrics</h2>
             <div id="lsp-status-icon" style="color: #555;">●</div>
         </div>
 
@@ -267,7 +267,7 @@ if (window.projetoFestivalInjetado) {
             document.getElementById('lsp-panel-container')?.remove(); 
             document.getElementById('lsp-overlay')?.remove(); 
             
-            window.projetoFestivalInjetado = false; 
+            window.frontLineLyricsInjetado = false; 
         }
     });
 }

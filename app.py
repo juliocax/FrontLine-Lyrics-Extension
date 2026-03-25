@@ -103,7 +103,7 @@ class MusicManager:
 
     def buscar_letra_lrclib(self, artista, musica):
         try:
-            headers = {"User-Agent": "ProjetoFestivalApp/1.0"}
+            headers = {"User-Agent": "FrontLineLyricsApp/1.0"}
             
             def extrair_linhas(synced_lyrics):
                 linhas = []
@@ -227,8 +227,8 @@ def sair_do_app(icon, item):
     icon.stop()
     os._exit(0) 
 def iniciar_bandeja():
-    menu = pystray.Menu(pystray.MenuItem('Sair do Projeto Festival', sair_do_app))
-    icone = pystray.Icon("ProjetoFestival", criar_icone(), "Projeto Festival (Servidor)", menu)
+    menu = pystray.Menu(pystray.MenuItem('Sair do FrontLine Lyrics', sair_do_app))
+    icone = pystray.Icon("FrontLineLyrics", criar_icone(), "FrontLine Lyrics (Servidor)", menu)
     icone.run()
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@ const abasAtivas = new Set();
 
 chrome.action.onClicked.addListener(async (tab) => {
     if (tab.url.startsWith("chrome://") || tab.url.startsWith("edge://")) {
-        console.warn("O Projeto Festival não pode ser ativado em páginas internas do navegador.");
+        console.warn("O FrontLine Lyrics não pode ser ativado em páginas internas do navegador.");
         return; 
     }
 

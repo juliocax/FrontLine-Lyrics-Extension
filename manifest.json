@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Projeto Festival",
+  "name": "FrontLine Lyrics",
   "version": "1.0",
   "permissions": [
     "activeTab",
@@ -10,7 +10,7 @@
     "http://localhost:5000/*"
   ],
   "action": {
-    "default_title": "Ligar/Desligar Projeto Festival"
+    "default_title": "Ligar/Desligar FrontLine Lyrics"
   },
   "background": {
     "service_worker": "background.js"
