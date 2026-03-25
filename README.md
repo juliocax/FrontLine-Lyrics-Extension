@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/promo.png" alt="Texto Alternativo">
+  <img src="assets/promo.png" alt="Texto Alternativo" width="300">
 </p>
 
 ![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
@@ -13,7 +13,7 @@
 **FrontLine Lyrics** is an open-source tool that brings live, synchronized lyrics straight to your browser. By listening to your computer's system audio, it automatically identifies the song currently playing and displays its lyrics in a floating, draggable overlay. It works seamlessly across any media player playing on your PC.
 
 ## Summary of Features
-* **Automatic Recognition**: Identifies the music being played on your system's standard audio output.*
+* **Automatic Recognition**: Identifies the music being played on your system's standard audio output.
 * **Synchronized Lyrics**: Fetches time-synced lyrics from LRCLib and displays them.
 * **Floating UI**: A draggable, non-intrusive lyrics overlay injected directly into your active browser tab using Shadow DOM.
 * **Manual Control**: Built-in search functionality and manual line-syncing if the automatic timing is slightly off.
@@ -83,6 +83,20 @@ We've prepared a visual walk-through of how our lyric synchronization tool works
       <br/>
       <b>6. Lyrics synchronized after manual adjustment</b>
       <p>The lyrics are back in perfect sync after a manual adjustment.</p>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="assets/selecao.png" alt="Real-time translation button" width="400"/>
+      <br/>
+      <b>7. Real-time translation without losing sync</b>
+      <p>Click the translation button to translate the lyrics into your preferred language on the fly.</p>
+    </td>
+    <td align="center">
+      <img src="assets/traducao.png" alt="Translated lyrics example" width="400"/>
+      <br/>
+      <b>8. Synchronized translated lyrics</b>
+      <p>The translated lyrics are displayed, maintaining perfect synchronization with the song.</p>
     </td>
   </tr>
 </table>
