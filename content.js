@@ -252,7 +252,7 @@ if (window.frontLineLyricsInjetado) {
             }
         } catch (e) {
             elStatusIcon.style.color = "red";
-            elStatus.innerText = "Python Offline";
+            elStatus.innerText = "Servidor Offline";
         }
     }
 
