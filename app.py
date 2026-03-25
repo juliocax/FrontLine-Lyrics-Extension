@@ -8,7 +8,7 @@ import threading
 import io
 import sys
 import os
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from shazamio import Shazam
 import pystray
@@ -19,6 +19,14 @@ NORMAL_INTERVAL = 1
 
 app = Flask(__name__)
 CORS(app)
+
+def resource_path(relative_path):
+    """ Obtém o caminho absoluto para recursos, funciona em dev e no PyInstaller """
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
 
 def log(mensagem, categoria="SISTEMA"):
     timestamp = time.strftime("%H:%M:%S")
@@ -161,13 +169,54 @@ def get_status():
 def iniciar_escuta():
     manager.reset_state()
     manager.escutando = True
-    manager.status_busca = "Ouvindo áudio do sistema..."
+    manager.status_busca = "Ouvindo..."
     return jsonify({"status": "processando"})
 
 @app.route('/parar', methods=['GET'])
 def parar_escuta():
     manager.reset_state()
     return jsonify({"status": "parado"})
+
+@app.route('/letra_completa', methods=['GET'])
+def get_letra_completa():
+    if manager.letra_sincronizada:
+        return jsonify({
+            "status": "sucesso",
+            "letra": manager.letra_sincronizada
+        })
+    return jsonify({"status": "erro", "mensagem": "Nenhuma letra carregada"})
+
+@app.route('/sincronizar_manual', methods=['GET'])
+def sincronizar_manual():
+
+    tempo = request.args.get('tempo', type=float)
+    if tempo is not None:
+        manager.tempo_referencia_sistema = time.time() - tempo
+        manager.delay_manual = 0.0
+        return jsonify({"status": "sucesso"})
+    return jsonify({"status": "erro"}), 400
+
+@app.route('/buscar_manual', methods=['GET'])
+def buscar_manual():
+    artista = request.args.get('artista')
+    musica = request.args.get('musica')
+    
+    if not artista or not musica:
+        return jsonify({"status": "erro", "mensagem": "Faltam parâmetros"}), 400
+        
+    letra = manager.buscar_letra_lrclib(artista, musica)
+    
+    if letra:
+        manager.letra_sincronizada = letra
+        manager.musica_atual = musica
+        manager.artista_atual = artista
+        manager.escutando = True  # Para ativar o painel
+        manager.tempo_referencia_sistema = time.time()
+        manager.delay_manual = 0.0
+        manager.status_busca = "Letra manual carregada"
+        return jsonify({"status": "sucesso", "letra_completa": letra})
+    else:
+        return jsonify({"status": "erro", "mensagem": "Letra não encontrada"}), 404
 
 async def async_worker_verificacao(manager):
     loop = asyncio.get_event_loop()
@@ -180,11 +229,9 @@ async def async_worker_verificacao(manager):
         t_inicio_gravacao = time.time()
         
         try:
-            # Captura os bytes do áudio direto da memória
             audio_bytes = await loop.run_in_executor(None, gravar_audio_memoria, INITIAL_RECORD_SECONDS)
         except Exception as e:
-            # TRATAMENTO DE ERRO: Avisa o front-end que falhou
-            manager.status_busca = "Erro: Áudio do sistema não detectado."
+            manager.status_busca = "Erro: Áudio não detectado."
             manager.escutando = False
             continue
         
@@ -196,7 +243,7 @@ async def async_worker_verificacao(manager):
             log(f"Identificado: {nova_musica}", "LOGIC")
             manager.musica_atual = nova_musica
             manager.artista_atual = novo_artista
-            manager.status_busca = "Baixando letra..."
+            manager.status_busca = "Buscando letra..."
             
             letra = await loop.run_in_executor(None, manager.buscar_letra_lrclib, novo_artista, nova_musica)
             
@@ -204,7 +251,7 @@ async def async_worker_verificacao(manager):
                 manager.letra_sincronizada = letra
                 manager.tempo_referencia_sistema = t_inicio_gravacao - offset_shazam
                 manager.busca_concluida = True
-                manager.status_busca = "Sincronizado"
+                # manager.status_busca = "Sincronizado"
             else:
                 manager.status_busca = "Letra não encontrada."
                 manager.busca_concluida = True
@@ -217,15 +264,19 @@ def start_background_loop(manager):
     loop.run_until_complete(async_worker_verificacao(manager))
 
 def criar_icone():
-    imagem = Image.new('RGB', (64, 64), color = (74, 144, 226))
-    desenho = ImageDraw.Draw(imagem)
+    caminho_imagem = resource_path("logo48.png")
+    try:
+        imagem = Image.open(caminho_imagem)
+    except:
+        imagem = Image.new('RGB', (64, 64), color=(74, 144, 226))
     return imagem
 
 def sair_do_app(icon, item):
     log("Encerrando aplicação...", "SISTEMA")
     manager.servidor_rodando = False
     icon.stop()
-    os._exit(0) 
+    os._exit(0)
+
 def iniciar_bandeja():
     menu = pystray.Menu(pystray.MenuItem('Sair do FrontLine Lyrics', sair_do_app))
     icone = pystray.Icon("FrontLineLyrics", criar_icone(), "FrontLine Lyrics (Servidor)", menu)
@@ -243,3 +294,4 @@ if __name__ == "__main__":
     log("Servidor rodando em segundo plano. Verifique o ícone na bandeja.")
 
     iniciar_bandeja()
+
