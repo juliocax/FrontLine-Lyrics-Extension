@@ -272,7 +272,7 @@ QPushButton {
 QPushButton:hover { background-color: rgba(255, 255, 255, 0.15); }
 
 /* Estados dos botões principais */
-QPushButton#BtnListen { background-color: rgba(106, 13, 173, 0.4); border: 1px solid #6A0DAD; }
+QPushButton#BtnListen { background-color: rgba(30, 9, 57, 0.2); border: 1px solid #6A0DAD; }
 QPushButton#BtnListenActive { background-color: #7A28CB; color: white; border: 2px inset #a955ff; }
 
 /* Botão de busca manual quando ativado (aderência) */
@@ -506,12 +506,11 @@ class ControlWindow(QWidget):
     def atualizar_capa_ui(self, image_bytes):
         pix = QPixmap()
         if not image_bytes: 
-            # Sem capa detectada: tenta carregar a logo padrão da pasta icons
             caminho_logo = self.obter_caminho_asset("logocapa.png", subpasta="icons")
             if os.path.exists(caminho_logo):
                 pix.load(caminho_logo)
             else:
-                self.lbl_capa.setText("Cover/Logo missing") # Evita que a interface quebre se o arquivo sumir
+                self.lbl_capa.setText("Cover/Logo missing")
                 return
         else:
             pix.loadFromData(image_bytes)
@@ -531,7 +530,7 @@ class ControlWindow(QWidget):
         self.update_button_style(self.btn_listen, True)
         self.lbl_musica.setText("Listening...")
         self.lbl_artista.setText("Please play a song")
-        self.atualizar_capa_ui(None) # Volta para a logo padrão enquanto escuta
+        self.atualizar_capa_ui(None)
         self.btn_pause.setDisabled(True)
         
     def iniciar_timer_autosync(self):
