@@ -51,6 +51,7 @@ class MusicManager:
         self.overlay_font_size = 26
         self.modo_fantasma = False
         self.auto_sync_ativado = False
+        self.inicio_escuta = 0.0 # <-- ADD: Rastreador de tempo para as mensagens divertidas
         self.reset_state()
 
     def _configurar_loopback(self):
@@ -92,6 +93,7 @@ class MusicManager:
         self.escutando, self.busca_concluida, self.letra_pausada = False, False, False
         self.status_busca = "Ready. Click Listen."
         self.momento_pausa = 0.0
+        self.inicio_escuta = time.time() # Reseta o relógio
         ui_signals.update_cover.emit(b'')
 
     async def reconhecer_snippet(self, audio_bytes):
@@ -258,8 +260,9 @@ QFrame#CompactCard {
     border-radius: 8px;
     border: 1px solid rgba(255, 255, 255, 0.05);
 }
-QLabel#SongTitle { font-size: 22px; font-weight: bold; color: white; }
-QLabel#ArtistName { color: #d1a3ff; font-size: 16px; font-weight: bold; }
+/* Removido o font-size fixo daqui para permitir diminuição dinâmica via código */
+QLabel#SongTitle { font-weight: bold; color: white; }
+QLabel#ArtistName { color: #d1a3ff; font-weight: bold; }
 QLabel#MiniLabel { color: #aaaaaa; font-size: 10px; }
 
 QPushButton { 
@@ -314,7 +317,6 @@ class ControlWindow(QWidget):
         self.setWindowTitle("FrontLine Deck")
         self.setStyleSheet(STYLESHEET)
         
-        # Trava o tamanho da janela
         self.setFixedSize(320, 600) 
         
         caminho_ico = self.obter_caminho_asset("logo.ico")
@@ -341,16 +343,20 @@ class ControlWindow(QWidget):
         capa_layout.addStretch(); capa_layout.addWidget(self.lbl_capa); capa_layout.addStretch()
         header_layout.addLayout(capa_layout)
 
-        self.atualizar_capa_ui(None)
-
         self.lbl_musica = QLabel("Deck Ready")
         self.lbl_musica.setObjectName("SongTitle")
         self.lbl_musica.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_musica.setStyleSheet("font-size: 22px;") 
+        
         self.lbl_artista = QLabel("Press Listen to start")
         self.lbl_artista.setObjectName("ArtistName")
         self.lbl_artista.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_artista.setStyleSheet("font-size: 16px;") 
+        
         header_layout.addWidget(self.lbl_musica)
         header_layout.addWidget(self.lbl_artista)
+        
+        self.atualizar_capa_ui(None)
         
         config_deck_layout = QHBoxLayout()
         lbl_lang = QLabel("Language:")
@@ -386,7 +392,7 @@ class ControlWindow(QWidget):
         self.btn_pause.setObjectName("BtnDeckAction")
         self.btn_pause.setFixedSize(60, 30)
         self.btn_pause.setDisabled(True)
-        caminho_playpause = self.obter_caminho_asset("playpause.ico")
+        caminho_playpause = self.obter_caminho_asset("playpause.ico", subpasta="icons")
         if os.path.exists(caminho_playpause):
             self.btn_pause.setIcon(QIcon(caminho_playpause))
         else:
@@ -450,7 +456,7 @@ class ControlWindow(QWidget):
         self.main_layout.addWidget(self.frame_overlay)
         
         # ==========================================
-        # 4. CRÉDITOS DO PROJETO (Compacto e próximo)
+        # CRÉDITOS DO PROJETO
         # ==========================================
         credits_html = """
         <div style='text-align: center; font-size: 11px; line-height: 1.2;'>
@@ -488,7 +494,7 @@ class ControlWindow(QWidget):
 
     def obter_caminho_asset(self, filename, subpasta="assets"):
         if getattr(sys, 'frozen', False):
-            base_dir = os.path.dirname(sys.executable)
+            base_dir = sys._MEIPASS 
         else:
             base_dir = os.path.dirname(os.path.abspath(__file__))
         return os.path.join(base_dir, subpasta, filename)
@@ -528,14 +534,18 @@ class ControlWindow(QWidget):
         self.ultima_musica_traduzida = None
         
         self.update_button_style(self.btn_listen, True)
+        self.lbl_musica.setStyleSheet("font-size: 22px;")
         self.lbl_musica.setText("Listening...")
+        self.lbl_artista.setStyleSheet("font-size: 16px;")
         self.lbl_artista.setText("Please play a song")
         self.atualizar_capa_ui(None)
         self.btn_pause.setDisabled(True)
         
     def iniciar_timer_autosync(self):
         if self.manager.auto_sync_ativado:
+            self.lbl_musica.setStyleSheet("font-size: 22px;")
             self.lbl_musica.setText("Waiting 3s...")
+            self.lbl_artista.setStyleSheet("font-size: 16px;")
             self.lbl_artista.setText("Fade out transition")
             QTimer.singleShot(3000, self.action_start_listen)
 
@@ -553,7 +563,9 @@ class ControlWindow(QWidget):
     def action_stop(self):
         self.manager.reset_state()
         self.ultima_musica_traduzida = None
+        self.lbl_musica.setStyleSheet("font-size: 22px;")
         self.lbl_musica.setText("Deck Ready")
+        self.lbl_artista.setStyleSheet("font-size: 16px;")
         self.lbl_artista.setText("Press Listen to start")
         self.atualizar_capa_ui(None)
         self.ipt_artista.clear()
@@ -585,7 +597,9 @@ class ControlWindow(QWidget):
         self.manager.reset_state()
         self.ultima_musica_traduzida = None
         
+        self.lbl_musica.setStyleSheet("font-size: 22px;")
         self.lbl_musica.setText("Searching...")
+        self.lbl_artista.setStyleSheet("font-size: 16px;")
         self.lbl_artista.setText("Fetching lyrics online...")
         self.atualizar_capa_ui(None) 
         
@@ -606,9 +620,32 @@ class ControlWindow(QWidget):
         if self.manager.musica_atual and self.btn_listen.objectName() == "BtnListenActive":
             self.update_button_style(self.btn_listen, False)
 
-        if self.manager.musica_atual:
-            self.lbl_musica.setText(self.manager.musica_atual)
-            self.lbl_artista.setText(self.manager.artista_atual)
+        if self.manager.escutando and not self.manager.musica_atual:
+            tempo_espera = time.time() - self.manager.inicio_escuta
+            if tempo_espera > 22:
+                self.lbl_artista.setText("Analyzing audio details...")
+            elif tempo_espera > 12:
+                self.lbl_artista.setText("Still trying to catch the beat...")
+            elif tempo_espera > 5:
+                self.lbl_artista.setText("Audio is tricky!")
+                
+        elif self.manager.musica_atual:
+            mus = self.manager.musica_atual
+            art = self.manager.artista_atual
+            
+            if len(mus) > 22:
+                self.lbl_musica.setStyleSheet("font-size: 16px;")
+                self.lbl_musica.setText(mus[:35] + "..." if len(mus) > 35 else mus)
+            else:
+                self.lbl_musica.setStyleSheet("font-size: 22px;")
+                self.lbl_musica.setText(mus)
+
+            if len(art) > 25:
+                self.lbl_artista.setStyleSheet("font-size: 13px;")
+                self.lbl_artista.setText(art[:40] + "..." if len(art) > 40 else art)
+            else:
+                self.lbl_artista.setStyleSheet("font-size: 16px;")
+                self.lbl_artista.setText(art)
             
             if self.manager.musica_atual != self.ultima_musica_traduzida and self.manager.letra_original:
                 self.aplicar_traducao_ui()
