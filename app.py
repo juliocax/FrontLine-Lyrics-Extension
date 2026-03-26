@@ -308,19 +308,22 @@ class ControlWindow(QWidget):
         self.manager = manager
         self.porta_servidor = porta_servidor
         self.overlay_process = None
+        self.ultima_musica_traduzida = None # Rastreador para a correção de idioma
+        
         self.setObjectName("Main")
         self.setWindowTitle("FrontLine Deck")
         self.setStyleSheet(STYLESHEET)
         
-        # Padrão mais compacto possível
-        self.setMinimumSize(320, 520)
-        self.resize(320, 520)
+        self.setMinimumSize(320, 540) # Aumentei 20px pra caber os créditos tranquilamente
+        self.resize(320, 540)
         
-        caminho_ico = os.path.join("assets", "logo.ico")
-        if os.path.exists(caminho_ico): self.setWindowIcon(QIcon(caminho_ico))
+        # Puxando o ícone de forma segura (funciona no .exe)
+        caminho_ico = self.obter_caminho_asset("logo.ico")
+        if os.path.exists(caminho_ico): 
+            self.setWindowIcon(QIcon(caminho_ico))
 
         self.main_layout = QVBoxLayout(self)
-        self.main_layout.setContentsMargins(15, 15, 15, 10)
+        self.main_layout.setContentsMargins(15, 15, 15, 5)
         
         # ==========================================
         # 1. DECK PRINCIPAL
@@ -329,10 +332,9 @@ class ControlWindow(QWidget):
         self.header_frame.setObjectName("GlassCard")
         self.header_frame.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         header_layout = QVBoxLayout(self.header_frame)
-        header_layout.setContentsMargins(5, 10, 5, 10) # Margens super reduzidas para focar na capa
+        header_layout.setContentsMargins(5, 10, 5, 10)
         header_layout.setSpacing(8)
         
-        # Capa Maior e Ocupando as Bordas
         self.lbl_capa = QLabel("")
         self.lbl_capa.setFixedSize(260, 260) 
         self.lbl_capa.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -340,7 +342,6 @@ class ControlWindow(QWidget):
         capa_layout.addStretch(); capa_layout.addWidget(self.lbl_capa); capa_layout.addStretch()
         header_layout.addLayout(capa_layout)
 
-        # Textos de Status
         self.lbl_musica = QLabel("Deck Ready")
         self.lbl_musica.setObjectName("SongTitle")
         self.lbl_musica.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -350,7 +351,6 @@ class ControlWindow(QWidget):
         header_layout.addWidget(self.lbl_musica)
         header_layout.addWidget(self.lbl_artista)
         
-        # Idioma e Auto-Sync
         config_deck_layout = QHBoxLayout()
         lbl_lang = QLabel("Language:")
         lbl_lang.setObjectName("MiniLabel")
@@ -369,7 +369,6 @@ class ControlWindow(QWidget):
         config_deck_layout.addStretch()
         header_layout.addLayout(config_deck_layout)
 
-        # Formulário de Busca Manual (Oculto)
         self.search_container = QWidget()
         search_layout = QHBoxLayout(self.search_container)
         search_layout.setContentsMargins(10, 0, 10, 0)
@@ -380,14 +379,19 @@ class ControlWindow(QWidget):
         self.search_container.hide()
         header_layout.addWidget(self.search_container)
 
-        # Ações Dinâmicas do Deck (Play/Pause OU Busca)
         action_layout = QHBoxLayout()
         
-        self.btn_pause = QPushButton("⏯")
+        # ÍCONE DE PLAY/PAUSE
+        self.btn_pause = QPushButton()
         self.btn_pause.setObjectName("BtnDeckAction")
         self.btn_pause.setFixedSize(60, 30)
         self.btn_pause.setDisabled(True)
-        
+        caminho_playpause = self.obter_caminho_asset("playpause.ico")
+        if os.path.exists(caminho_playpause):
+            self.btn_pause.setIcon(QIcon(caminho_playpause))
+        else:
+            self.btn_pause.setText("⏯") # Backup caso a imagem não exista
+            
         self.btn_exec_search = QPushButton("🔍 SYNC")
         self.btn_exec_search.setObjectName("BtnDeckAction")
         self.btn_exec_search.setFixedSize(80, 30)
@@ -434,7 +438,6 @@ class ControlWindow(QWidget):
         self.slider_fonte.setFixedWidth(60)
         
         self.cb_ghost = QCheckBox("Lock")
-        
         self.btn_reload = QPushButton("RELOAD")
         self.btn_reload.setStyleSheet("padding: 4px; font-size: 10px;")
         
@@ -444,8 +447,16 @@ class ControlWindow(QWidget):
         overlay_layout.addWidget(self.cb_ghost)
         overlay_layout.addStretch()
         overlay_layout.addWidget(self.btn_reload)
-        
         self.main_layout.addWidget(self.frame_overlay)
+        
+        # ==========================================
+        # 4. CRÉDITOS DO PROJETO
+        # ==========================================
+        self.lbl_credits = QLabel('<a href="https://github.com/juliocax" style="color: #6a0dad; text-decoration: none; font-weight: bold;">Created by Julio</a>')
+        self.lbl_credits.setOpenExternalLinks(True)
+        self.lbl_credits.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_credits.setStyleSheet("font-size: 11px;")
+        self.main_layout.addWidget(self.lbl_credits)
 
         # ==========================================
         # CONEXÕES
@@ -458,23 +469,30 @@ class ControlWindow(QWidget):
         self.btn_exec_search.clicked.connect(self.action_buscar_manual)
         
         self.cb_auto_sync.toggled.connect(self.action_toggle_autosync)
-        self.cb_lang.currentTextChanged.connect(self.action_change_lang)
+        self.cb_lang.currentTextChanged.connect(self.aplicar_traducao_ui)
         self.slider_fonte.valueChanged.connect(self.action_mudar_fonte)
         self.cb_ghost.toggled.connect(self.action_toggle_ghost)
         self.btn_reload.clicked.connect(self.iniciar_subprocesso_overlay)
         
         ui_signals.update_cover.connect(self.atualizar_capa_ui)
-        ui_signals.song_finished.connect(self.reiniciar_escuta)
+        ui_signals.song_finished.connect(self.iniciar_timer_autosync)
         ui_signals.search_error.connect(lambda msg: self.lbl_artista.setText(msg))
 
         self.iniciar_subprocesso_overlay()
         self.timer = QTimer(); self.timer.timeout.connect(self.update_ui_loop); self.timer.start(500)
 
-    # --- LÓGICA DE UI ---
+    # --- FUNÇÕES UTILITÁRIAS ---
+    def obter_caminho_asset(self, filename, subpasta="assets"):
+        """Garante que a imagem seja achada tanto rodando no script quanto no .exe"""
+        if getattr(sys, 'frozen', False):
+            base_dir = os.path.dirname(sys.executable)
+        else:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+        return os.path.join(base_dir, subpasta, filename)
+
     def iniciar_subprocesso_overlay(self):
         if self.overlay_process: self.overlay_process.terminate()
-        dir_base = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.abspath(__file__))
-        caminho = os.path.join(dir_base, "FrontLineOverlay.exe")
+        caminho = os.path.join(os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.abspath(__file__)), "FrontLineOverlay.exe")
         try: self.overlay_process = subprocess.Popen([caminho, str(self.porta_servidor)])
         except: pass
 
@@ -483,34 +501,49 @@ class ControlWindow(QWidget):
         QApplication.quit()
 
     def atualizar_capa_ui(self, image_bytes):
-        if not image_bytes: self.lbl_capa.clear(); return
-        pix = QPixmap(); pix.loadFromData(image_bytes)
+        pix = QPixmap()
+        
+        if not image_bytes: 
+            # Sem capa detectada: tenta carregar a logo padrão
+            caminho_logo = self.obter_caminho_asset("icons/logo128.png", subpasta="icons")
+            if os.path.exists(caminho_logo):
+                pix.load(caminho_logo)
+            else:
+                # Plano B extremo: se até a logo sumir da pasta, limpa a tela
+                self.lbl_capa.clear()
+                return
+        else:
+            # Capa detectada: carrega o arquivo de áudio/shazam
+            pix.loadFromData(image_bytes)
+            
+        # Aplica a imagem (seja a capa ou a logo) com o tamanho e arredondamento perfeitos
         self.lbl_capa.setPixmap(pix.scaled(260, 260, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation))
 
     def update_button_style(self, btn, is_active):
-        """Atualiza a folha de estilo do botão sem bugar o layout inteiro"""
         btn.setObjectName("BtnListenActive" if is_active else "BtnListen")
         btn.style().unpolish(btn)
         btn.style().polish(btn)
 
+    # --- LÓGICA DE UI ---
     def action_start_listen(self):
         self.manager.reset_state()
         self.manager.escutando = True
+        self.ultima_musica_traduzida = None
         
-        # Aderência Visual e Status Deck
         self.update_button_style(self.btn_listen, True)
         self.lbl_musica.setText("Listening...")
         self.lbl_artista.setText("Please play a song")
         self.lbl_capa.clear()
         self.btn_pause.setDisabled(True)
         
-    def reiniciar_escuta(self):
-        # Disparado quando a música atual finaliza. O Auto-Sync entra em ação aqui.
+    def iniciar_timer_autosync(self):
+        """Aplica o atraso de 3 segundos antes de continuar a escutar"""
         if self.manager.auto_sync_ativado:
-            self.action_start_listen()
+            self.lbl_musica.setText("Waiting 3s...")
+            self.lbl_artista.setText("Fade out transition")
+            QTimer.singleShot(3000, self.action_start_listen)
 
     def action_toggle_search_mode(self, checked):
-        # Transição no Deck
         self.search_container.setVisible(checked)
         self.btn_pause.setVisible(not checked)
         self.btn_exec_search.setVisible(checked)
@@ -520,6 +553,7 @@ class ControlWindow(QWidget):
 
     def action_stop(self):
         self.manager.reset_state()
+        self.ultima_musica_traduzida = None
         self.lbl_musica.setText("Deck Ready")
         self.lbl_artista.setText("Press Listen to start")
         self.lbl_capa.clear()
@@ -537,10 +571,13 @@ class ControlWindow(QWidget):
         self.manager.momento_pausa = time.time() if self.manager.letra_pausada else 0
         self.btn_pause.setStyleSheet("background-color: #a955ff;" if self.manager.letra_pausada else "")
 
-    def action_change_lang(self, text):
-        lang = {"Original": "original", "Pt-Br": "pt", "Espanol": "es", "English": "en"}.get(text, "original")
-        if lang == "original": self.manager.letra_sincronizada = self.manager.letra_original
-        elif self.manager.gerar_traducao(lang): self.manager.letra_sincronizada = self.manager.traducoes_cacheadas[lang]
+    def aplicar_traducao_ui(self):
+        """Força a aplicação do idioma baseando-se no que está escrito no combobox"""
+        lang = {"Original": "original", "Pt-Br": "pt", "Espanol": "es", "English": "en"}.get(self.cb_lang.currentText(), "original")
+        if lang == "original": 
+            self.manager.letra_sincronizada = self.manager.letra_original
+        elif self.manager.gerar_traducao(lang): 
+            self.manager.letra_sincronizada = self.manager.traducoes_cacheadas[lang]
 
     def action_buscar_manual(self):
         art, mus = self.ipt_artista.text(), self.ipt_musica.text()
@@ -548,6 +585,7 @@ class ControlWindow(QWidget):
         
         self.btn_manual_search.setChecked(False) 
         self.manager.reset_state()
+        self.ultima_musica_traduzida = None
         self.lbl_musica.setText("Searching...")
         self.lbl_artista.setText("Fetching lyrics online...")
         
@@ -565,13 +603,17 @@ class ControlWindow(QWidget):
     def action_toggle_ghost(self, checked): self.manager.modo_fantasma = checked
 
     def update_ui_loop(self):
-        # Se a música foi encontrada e o botão ainda está afundado, ele solta a aderência.
         if self.manager.musica_atual and self.btn_listen.objectName() == "BtnListenActive":
             self.update_button_style(self.btn_listen, False)
 
         if self.manager.musica_atual:
             self.lbl_musica.setText(self.manager.musica_atual)
             self.lbl_artista.setText(self.manager.artista_atual)
+            
+            # GATILHO DA TRADUÇÃO: Se a música mudou e a letra original já chegou, tenta traduzir
+            if self.manager.musica_atual != self.ultima_musica_traduzida and self.manager.letra_original:
+                self.aplicar_traducao_ui()
+                self.ultima_musica_traduzida = self.manager.musica_atual
             
         if self.manager.letra_sincronizada: 
             self.btn_pause.setDisabled(False)
@@ -581,8 +623,16 @@ def encontrar_porta_livre():
         s.bind(('', 0)); return s.getsockname()[1]
 
 if __name__ == "__main__":
+    import ctypes
+    try:
+        myappid = 'juliocax.frontlinedeck.app.1.0'
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+    except Exception:
+        pass
+
     app = QApplication(sys.argv)
     porta = encontrar_porta_livre()
     threading.Thread(target=start_background_loop, args=(porta,), daemon=True).start()
-    window = ControlWindow(manager, porta); window.show()
+    window = ControlWindow(manager, porta)
+    window.show()
     sys.exit(app.exec())
