@@ -12,7 +12,7 @@
 ## Introduction
 **FrontLine Lyrics** is an open-source tool that brings live, synchronized lyrics straight to your browser. By listening to your computer's system audio, it automatically identifies the song currently playing and displays its lyrics in a floating, draggable overlay. It works seamlessly across any media player playing on your PC.
 
-*Want a more robust experience? Check out the [FrontLine Lyrics Desktop Version](https://github.com/juliocax](https://github.com/juliocax/FrontLine-Lyrics-Desktop).*
+*Want a more robust experience? Check out the [FrontLine Lyrics Desktop Version](https://github.com/juliocax/FrontLine-Lyrics-Desktop)*
 
 ## Summary of Features
 * **Automatic Recognition**: Identifies the music being played on your system's standard audio output.
